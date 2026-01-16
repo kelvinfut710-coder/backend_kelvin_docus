@@ -149,10 +149,8 @@ app.delete('/api/admin/documentos/:id', verificarToken, async (req, res) => {
     }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-    console.log(`\n🚀 ==========================================`);
     console.log(`🚀 SERVIDOR CORRIENDO EN PUERTO: ${PORT}`);
-    console.log(`🚀 SISTEMA VEHICULAR LISTO PARA OPERAR`);
-    console.log(`==========================================\n`);
 });
