@@ -53,18 +53,18 @@ app.post('/api/login', async (req, res) => {
         }
         const user = result.rows[0];
         const token = jwt.sign({ id: user.id, rol: user.rol }, process.env.JWT_SECRET, { expiresIn: '8h' });
-        res.json({ token, rol: user.rol, nombre: user.primer_nombre });
+        res.json({ token, rol: user.rol, nombre: user.nombre_completo });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// CREAR USUARIO
+// CREAR USUARIO (Corregido a Nombre Completo)
 app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
     if (req.user.rol !== 'admin') return res.status(403).json({ error: 'No autorizado' });
-    const { cedula, p_nom, s_nom, p_ape, s_ape } = req.body;
+    const { cedula, nombre_completo } = req.body;
     try {
         await pool.query(
-            'INSERT INTO usuarios (username, cedula, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, rol) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [cedula, cedula, p_nom, s_nom, p_ape, s_ape, 'user']
+            'INSERT INTO usuarios (username, cedula, nombre_completo, rol) VALUES ($1, $2, $3, $4)',
+            [cedula, cedula, nombre_completo, 'user']
         );
         res.json({ message: 'Ok' });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -72,11 +72,11 @@ app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
 
 // LISTAR EMPLEADOS
 app.get('/api/admin/empleados', verificarToken, async (req, res) => {
-    const result = await pool.query("SELECT * FROM usuarios WHERE rol = 'user' ORDER BY primer_apellido ASC");
+    const result = await pool.query("SELECT * FROM usuarios WHERE rol = 'user' ORDER BY nombre_completo ASC");
     res.json(result.rows);
 });
 
-// SUBIR DOCS TRABAJADOR CON FECHA
+// SUBIR DOCS TRABAJADOR
 app.post('/api/admin/subir-a-usuario', verificarToken, upload.single('archivo'), async (req, res) => {
     const { tipo_documento, usuario_id, nombre_user, fecha_caducidad } = req.body;
     try {
@@ -94,7 +94,6 @@ app.get('/api/admin/documentos-empresa', verificarToken, async (req, res) => {
     res.json(result.rows);
 });
 
-// SUBIR DOCS EMPRESA CON FECHA
 app.post('/api/subir-empresa', verificarToken, upload.single('archivo'), async (req, res) => {
     const { tipo_documento, fecha_caducidad } = req.body;
     try {
@@ -115,11 +114,10 @@ app.delete('/api/admin/documentos-empresa/:id', verificarToken, async (req, res)
     res.json({ message: 'Ok' });
 });
 
-// LISTAR DOCUMENTOS DE UN USUARIO
 app.get('/api/admin/documentos/:id', verificarToken, async (req, res) => {
     const result = await pool.query('SELECT * FROM documentos WHERE usuario_id = $1', [req.params.id]);
     res.json(result.rows);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Servidor en puerto ${PORT}`));
