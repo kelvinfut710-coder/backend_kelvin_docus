@@ -43,7 +43,6 @@ const verificarToken = (req, res, next) => {
     } catch (err) { res.status(400).json({ error: 'Token no válido' }); }
 };
 
-// LOGIN (Usa cédula como password)
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -57,7 +56,6 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// CREAR USUARIO (4 campos + Cédula)
 app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
     if (req.user.rol !== 'admin') return res.status(403).json({ error: 'No autorizado' });
     const { cedula, p_nom, s_nom, p_ape, s_ape } = req.body;
@@ -70,39 +68,38 @@ app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// LISTAR EMPLEADOS
 app.get('/api/admin/empleados', verificarToken, async (req, res) => {
     const result = await pool.query("SELECT * FROM usuarios WHERE rol = 'user' ORDER BY primer_apellido ASC");
     res.json(result.rows);
 });
 
-// SUBIR DOCS TRABAJADOR
+// SUBIR DOCS TRABAJADOR (Actualizado con fecha_caducidad)
 app.post('/api/admin/subir-a-usuario', verificarToken, upload.single('archivo'), async (req, res) => {
-    const { tipo_documento, usuario_id, nombre_user } = req.body;
+    const { tipo_documento, usuario_id, nombre_user, fecha_caducidad } = req.body;
     try {
         await pool.query(
-            'INSERT INTO documentos (usuario_id, tipo_documento, url_cloudinary, nombre_user) VALUES ($1, $2, $3, $4)', 
-            [usuario_id, tipo_documento, req.file.path, nombre_user]
+            'INSERT INTO documentos (usuario_id, tipo_documento, url_cloudinary, nombre_user, fecha_caducidad) VALUES ($1, $2, $3, $4, $5)', 
+            [usuario_id, tipo_documento, req.file.path, nombre_user, fecha_caducidad || null]
         );
         res.json({ message: 'Ok' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GESTIÓN DOCUMENTOS EMPRESA
 app.get('/api/admin/documentos-empresa', verificarToken, async (req, res) => {
     const result = await pool.query('SELECT * FROM documentos_empresa ORDER BY id DESC');
     res.json(result.rows);
 });
 
+// SUBIR DOCS EMPRESA (Actualizado con fecha_caducidad)
 app.post('/api/subir-empresa', verificarToken, upload.single('archivo'), async (req, res) => {
-    const { tipo_documento } = req.body;
+    const { tipo_documento, fecha_caducidad } = req.body;
     try {
-        await pool.query('INSERT INTO documentos_empresa (tipo_documento, url_cloudinary) VALUES ($1, $2)', [tipo_documento, req.file.path]);
+        await pool.query('INSERT INTO documentos_empresa (tipo_documento, url_cloudinary, fecha_caducidad) VALUES ($1, $2, $3)', 
+            [tipo_documento, req.file.path, fecha_caducidad || null]);
         res.json({ message: 'Ok' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ELIMINACIÓN GENÉRICA
 app.delete('/api/admin/documentos/:id', verificarToken, async (req, res) => {
     await pool.query('DELETE FROM documentos WHERE id = $1', [req.params.id]);
     res.json({ message: 'Ok' });
@@ -113,7 +110,6 @@ app.delete('/api/admin/documentos-empresa/:id', verificarToken, async (req, res)
     res.json({ message: 'Ok' });
 });
 
-// LISTAR DOCUMENTOS DE UN USUARIO
 app.get('/api/admin/documentos/:id', verificarToken, async (req, res) => {
     const result = await pool.query('SELECT * FROM documentos WHERE usuario_id = $1', [req.params.id]);
     res.json(result.rows);
