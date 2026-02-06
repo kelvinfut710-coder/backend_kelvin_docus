@@ -57,46 +57,30 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- RUTA CRÍTICA: CREAR USUARIO CON LOGS ---
+// --- NUEVA RUTA: CREAR USUARIO ---
 app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
-    console.log("--- INICIO DE CREACIÓN DE USUARIO ---");
-    console.log("Datos recibidos:", req.body);
-    
-    if (req.user.rol !== 'admin') {
-        console.log("FALLO: El usuario no es admin");
-        return res.status(403).json({ error: 'No autorizado' });
-    }
-
+    if (req.user.rol !== 'admin') return res.status(403).json({ error: 'No autorizado' });
     const { username, password_hash, nombre_completo } = req.body;
-
     try {
-        console.log("Ejecutando Query en DB...");
-        const query = 'INSERT INTO usuarios (username, password_hash, nombre_completo, rol) VALUES ($1, $2, $3, $4) RETURNING id';
-        const values = [username, password_hash, nombre_completo, 'user'];
-        
-        const result = await pool.query(query, values);
-        console.log("USUARIO CREADO EXITOSAMENTE. ID:", result.rows[0].id);
-        
-        res.json({ message: 'Usuario creado', id: result.rows[0].id });
-    } catch (err) {
-        console.error("!!! ERROR EN DB !!!");
-        console.error("Mensaje de error:", err.message);
-        console.error("Código de error:", err.code); // Ayuda a saber si es duplicado o falta columna
-        res.status(500).json({ 
-            error: 'Error interno de DB', 
-            detalle: err.message,
-            codigo: err.code 
-        });
-    }
+        await pool.query(
+            'INSERT INTO usuarios (username, password_hash, nombre_completo, rol) VALUES ($1, $2, $3, $4)',
+            [username, password_hash, nombre_completo, 'user']
+        );
+        res.json({ message: 'Usuario creado' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- LISTA DE EMPLEADOS ---
+// --- RUTAS DE GESTIÓN (TUS ORIGINALES) ---
 app.get('/api/admin/empleados', verificarToken, async (req, res) => {
     const result = await pool.query("SELECT id, nombre_completo FROM usuarios WHERE rol = 'user' ORDER BY nombre_completo ASC");
     res.json(result.rows);
 });
 
-// --- SUBIDA DE DOCUMENTOS (ADMIN) ---
+app.get('/api/admin/documentos/:id', verificarToken, async (req, res) => {
+    const result = await pool.query('SELECT * FROM documentos WHERE usuario_id = $1', [req.params.id]);
+    res.json(result.rows);
+});
+
 app.post('/api/admin/subir-a-usuario', verificarToken, upload.single('archivo'), async (req, res) => {
     const { tipo_documento, usuario_id, nombre_user } = req.body;
     try {
@@ -104,18 +88,37 @@ app.post('/api/admin/subir-a-usuario', verificarToken, upload.single('archivo'),
             'INSERT INTO documentos (usuario_id, tipo_documento, url_cloudinary, nombre_user) VALUES ($1, $2, $3, $4)', 
             [usuario_id, tipo_documento, req.file.path, nombre_user]
         );
-        res.json({ message: 'Documento cargado' });
-    } catch (err) { 
-        console.error("Error al subir:", err.message);
-        res.status(500).json({ error: err.message }); 
-    }
+        res.json({ message: 'Ok' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- DOCUMENTOS POR USUARIO ---
-app.get('/api/admin/documentos/:id', verificarToken, async (req, res) => {
-    const result = await pool.query('SELECT * FROM documentos WHERE usuario_id = $1', [req.params.id]);
+app.delete('/api/admin/documentos/:id', verificarToken, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM documentos WHERE id = $1', [req.params.id]);
+        res.json({ message: 'Eliminado' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DOCUMENTOS EMPRESA (TUS ORIGINALES)
+app.get('/api/admin/documentos-empresa', verificarToken, async (req, res) => {
+    const result = await pool.query('SELECT * FROM documentos_empresa ORDER BY id DESC');
     res.json(result.rows);
 });
 
+app.post('/api/subir-empresa', verificarToken, upload.single('archivo'), async (req, res) => {
+    const { tipo_documento } = req.body;
+    try {
+        await pool.query('INSERT INTO documentos_empresa (tipo_documento, url_cloudinary) VALUES ($1, $2)', [tipo_documento, req.file.path]);
+        res.json({ message: 'Ok' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/documentos-empresa/:id', verificarToken, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM documentos_empresa WHERE id = $1', [req.params.id]);
+        res.json({ message: 'Ok' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor listo en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Puerto ${PORT}`));
