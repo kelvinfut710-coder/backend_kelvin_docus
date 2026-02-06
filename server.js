@@ -86,18 +86,57 @@ app.post('/api/admin/crear-usuario', verificarToken, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// LISTAR EMPLEADOS
+// LISTAR EMPLEADOS (ACTIVOS)
 app.get('/api/admin/empleados', verificarToken, async (req, res) => {
     const result = await pool.query("SELECT * FROM usuarios WHERE rol = 'user' ORDER BY nombre_completo ASC");
     res.json(result.rows);
 });
 
-// SUBIR DOCS TRABAJADOR
+// LISTAR PASIVOS
+app.get('/api/admin/pasivos', verificarToken, async (req, res) => {
+    const result = await pool.query("SELECT * FROM pasivos ORDER BY nombre_completo ASC");
+    res.json(result.rows);
+});
+
+// MOVER A PASIVO (TRANSFORMACIÓN)
+app.post('/api/admin/mover-a-pasivo/:id', verificarToken, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const userRes = await client.query('SELECT * FROM usuarios WHERE id = $1', [req.params.id]);
+        if (userRes.rows.length === 0) throw new Error("Usuario no encontrado");
+        const u = userRes.rows[0];
+
+        const insertPasivo = await client.query(
+            'INSERT INTO pasivos (username, cedula, nombre_completo, rol) VALUES ($1, $2, $3, $4) RETURNING id',
+            [u.username, u.cedula, u.nombre_completo, u.rol]
+        );
+        const nuevoId = insertPasivo.rows[0].id;
+
+        await client.query(
+            'INSERT INTO documentos_pasivos (usuario_id, tipo_documento, url_cloudinary, nombre_user, fecha_caducidad) ' +
+            'SELECT $1, tipo_documento, url_cloudinary, nombre_user, fecha_caducidad FROM documentos WHERE usuario_id = $2',
+            [nuevoId, u.id]
+        );
+
+        await client.query('DELETE FROM documentos WHERE usuario_id = $1', [u.id]);
+        await client.query('DELETE FROM usuarios WHERE id = $1', [u.id]);
+
+        await client.query('COMMIT');
+        res.json({ message: 'Ok' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    } finally { client.release(); }
+});
+
+// SUBIR DOCS TRABAJADOR (ACTIVO O PASIVO)
 app.post('/api/admin/subir-a-usuario', verificarToken, upload.single('archivo'), async (req, res) => {
-    const { tipo_documento, usuario_id, nombre_user, fecha_caducidad } = req.body;
+    const { tipo_documento, usuario_id, nombre_user, fecha_caducidad, es_pasivo } = req.body;
+    const tabla = es_pasivo === 'true' ? 'documentos_pasivos' : 'documentos';
     try {
         await pool.query(
-            'INSERT INTO documentos (usuario_id, tipo_documento, url_cloudinary, nombre_user, fecha_caducidad) VALUES ($1, $2, $3, $4, $5)', 
+            `INSERT INTO ${tabla} (usuario_id, tipo_documento, url_cloudinary, nombre_user, fecha_caducidad) VALUES ($1, $2, $3, $4, $5)`, 
             [usuario_id, tipo_documento, req.file.path, nombre_user, fecha_caducidad || null]
         );
         res.json({ message: 'Ok' });
@@ -121,7 +160,9 @@ app.post('/api/subir-empresa', verificarToken, upload.single('archivo'), async (
 
 // ELIMINACIÓN
 app.delete('/api/admin/documentos/:id', verificarToken, async (req, res) => {
-    await pool.query('DELETE FROM documentos WHERE id = $1', [req.params.id]);
+    const esPasivo = req.query.pasivo === 'true';
+    const tabla = esPasivo ? 'documentos_pasivos' : 'documentos';
+    await pool.query(`DELETE FROM ${tabla} WHERE id = $1`, [req.params.id]);
     res.json({ message: 'Ok' });
 });
 
@@ -131,7 +172,9 @@ app.delete('/api/admin/documentos-empresa/:id', verificarToken, async (req, res)
 });
 
 app.get('/api/admin/documentos/:id', verificarToken, async (req, res) => {
-    const result = await pool.query('SELECT * FROM documentos WHERE usuario_id = $1', [req.params.id]);
+    const esPasivo = req.query.pasivo === 'true';
+    const tabla = esPasivo ? 'documentos_pasivos' : 'documentos';
+    const result = await pool.query(`SELECT * FROM ${tabla} WHERE usuario_id = $1`, [req.params.id]);
     res.json(result.rows);
 });
 
